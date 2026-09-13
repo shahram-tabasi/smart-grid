@@ -281,6 +281,75 @@ def scan_registers(host: str, port: int, unit: int, span: int, start: int = 0) -
     return 0 if total_found else 1
 
 
+def watch_points(host: str, port: int, unit: int, table: str, addresses: list[int], interval: float) -> int:
+    """
+    Poll a set of points and print every change as it happens.
+
+    Identifying a binary point is otherwise a memory game: scan, go to the relay, operate something,
+    come back, scan again, compare two screens of numbers. Watching instead means the relay can be
+    operated while the addresses are on screen, and the one that moves when the breaker moves is the
+    one to map -- which is evidence of meaning, rather than a guess from a plausible-looking value.
+    """
+    function = {"coil": 1, "discrete": 2, "input": 4, "holding": 3}[table]
+    doc_base = {"coil": 1, "discrete": 10001, "input": 30001, "holding": 40001}[table]
+    binary = function in (1, 2)
+
+    print(f"Watching {len(addresses)} {table} point(s) on {host}:{port}, unit id {unit}")
+    print("Operate the relay now - open/close the breaker, or trigger the test trip.")
+    print("Any address that changes is printed below. Press Ctrl+C to stop.\n")
+
+    last: dict[int, int] = {}
+    sock = None
+    tid = 1
+    try:
+        while True:
+            if sock is None:
+                try:
+                    sock = socket.create_connection((host, port), timeout=5)
+                    sock.settimeout(5)
+                except OSError as err:
+                    print(f"  cannot connect ({err}); retrying")
+                    time.sleep(interval)
+                    continue
+
+            for addr in addresses:
+                offset = addr - doc_base
+                try:
+                    tid = (tid % 65000) + 1
+                    response = read_once(sock, unit, function, offset, 1, tid=tid)
+                except (Dropped, ConnectionResetError, socket.timeout, OSError):
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
+                    sock = None
+                    break
+
+                if response[0] & 0x80:
+                    continue
+                payload = response[2:]
+                if not payload:
+                    continue
+                value = (payload[0] & 1) if binary else struct.unpack(">H", payload[0:2])[0]
+
+                if addr in last and last[addr] != value:
+                    stamp = time.strftime("%H:%M:%S")
+                    arrow = "OFF -> ON" if binary and value else "ON -> OFF" if binary else f"{last[addr]} -> {value}"
+                    print(f"  {stamp}  address {addr}: {arrow}")
+                last[addr] = value
+
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        print("\nstopped.")
+        if last:
+            on = [a for a, v in last.items() if v]
+            print(f"Final state: {len(on)} point(s) ON: {on}" if on else "Final state: all points OFF")
+    finally:
+        if sock:
+            sock.close()
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Probe a relay's Modbus TCP server.")
     parser.add_argument("host")
@@ -316,7 +385,22 @@ def main() -> int:
         default=0,
         help="Wire offset to start --scan from; a map can sit well above address 1 (default 0)",
     )
+    parser.add_argument(
+        "--watch",
+        help="Comma-separated addresses to poll continuously, printing changes (e.g. 25,26,105)",
+    )
+    parser.add_argument(
+        "--table",
+        choices=["coil", "discrete", "input", "holding"],
+        default="coil",
+        help="Which table --watch addresses belong to (default coil)",
+    )
+    parser.add_argument("--interval", type=float, default=1.0, help="Seconds between --watch polls")
     args = parser.parse_args()
+
+    if args.watch:
+        addresses = [int(a) for a in args.watch.split(",") if a.strip()]
+        return watch_points(args.host, args.port, args.unit, args.table, addresses, args.interval)
 
     if args.scan:
         return scan_registers(args.host, args.port, args.unit, args.span, args.start)

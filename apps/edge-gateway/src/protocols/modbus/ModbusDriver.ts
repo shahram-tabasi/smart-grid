@@ -219,10 +219,25 @@ export class ModbusDriver extends BaseRelayDriver {
         ? FUNCTION_CODES.READ_INPUT_REGISTERS
         : FUNCTION_CODES.READ_HOLDING_REGISTERS;
 
-    // Modbus data-model addresses are 1-based with a table prefix (3xxxx/4xxxx); the wire protocol
-    // is 0-based within the table. Normalise here so point maps can use documentation addresses.
+    // Modbus documentation numbers every table 1-based, with a prefix on all but the coils: coils
+    // 1-9999, discrete inputs 10001-19999, input registers 30001-39999, holding 40001-49999. The
+    // wire protocol carries a 0-based offset within the table the function code already selected.
+    // Relay manuals print the documentation form, so convert per table.
+    //
+    // The coil case has to key off the table rather than the magnitude: a coil's documentation
+    // address carries no prefix to recognise it by, so a magnitude test cannot tell coil 25 (wire
+    // 24) from a raw offset, and reading the neighbouring coil silently reports the wrong signal.
     const raw = point.address;
-    const wireAddress = raw >= 40001 ? raw - 40001 : raw >= 30001 ? raw - 30001 : raw >= 10001 ? raw - 10001 : raw;
+    const wireAddress =
+      table === 'COIL'
+        ? Math.max(0, raw - 1)
+        : table === 'DISCRETE_INPUT'
+        ? (raw >= 10001 ? raw - 10001 : raw)
+        : table === 'INPUT'
+        ? (raw >= 30001 ? raw - 30001 : raw)
+        : raw >= 40001
+        ? raw - 40001
+        : raw;
 
     const words = point.dataType === 'UINT32' || point.dataType === 'INT32' || point.dataType === 'FLOAT32' ? 2 : 1;
     const quantity = table === 'COIL' || table === 'DISCRETE_INPUT' ? 1 : words;
