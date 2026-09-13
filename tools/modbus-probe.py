@@ -169,7 +169,7 @@ def probe(host: str, port: int, unit: int, address: int, count: int, hold: float
     return answered
 
 
-def scan_registers(host: str, port: int, unit: int, span: int) -> int:
+def scan_registers(host: str, port: int, unit: int, span: int, start: int = 0) -> int:
     """
     Find which register addresses the relay actually serves.
 
@@ -181,20 +181,28 @@ def scan_registers(host: str, port: int, unit: int, span: int) -> int:
     The whole sweep reuses ONE connection: relays commonly allow only a couple of concurrent Modbus
     sessions, so opening a socket per address would exhaust them.
     """
+    # Binary tables are scanned too, and first: on a relay the signals that matter for protection
+    # -- breaker position, trip, pickup -- are commonly published as discrete inputs or coils, so a
+    # register-only sweep can report "nothing mapped" while the trip signal is sitting right there.
     tables = [
+        ("Discrete inputs (1xxxx)", 2, 10001),
+        ("Coils (0xxxx)", 1, 1),
         ("Input registers (3xxxx)", 4, 30001),
         ("Holding registers (4xxxx)", 3, 40001),
     ]
 
-    print(f"Scanning {host}:{port} unit id {unit}, {span} addresses per table")
-    print("(one register at a time, reusing a single connection)\n")
+    print(f"Scanning {host}:{port} unit id {unit}, {span} addresses per table from offset {start}")
+    print("(one address at a time, reusing a single connection)\n")
 
     total_found = 0
+    binary_found = 0
+    register_found = 0
     for label, function, doc_base in tables:
         print(f"--- {label} ---")
         sock, err = None, None
         found = []
-        for offset in range(span):
+        binary_table = function in (1, 2)
+        for offset in range(start, start + span):
             if sock is None:
                 try:
                     sock = socket.create_connection((host, port), timeout=5)
@@ -216,7 +224,10 @@ def scan_registers(host: str, port: int, unit: int, span: int) -> int:
             if response[0] & 0x80:
                 continue  # exception: this address is not served, which is the expected common case
             payload = response[2:]
-            if len(payload) >= 2:
+            if binary_table:
+                if payload:
+                    found.append((doc_base + offset, payload[0] & 1))
+            elif len(payload) >= 2:
                 found.append((doc_base + offset, struct.unpack(">H", payload[0:2])[0]))
 
         if sock:
@@ -224,17 +235,28 @@ def scan_registers(host: str, port: int, unit: int, span: int) -> int:
 
         if found:
             total_found += len(found)
+            if binary_table:
+                binary_found += len(found)
+            else:
+                register_found += len(found)
             print(f"  {len(found)} address(es) answered:")
-            # Adjacent pairs are worth showing as one 32-bit value too: measurements are commonly
-            # published across two registers, which is why the point map has UINT32 entries.
-            for i, (addr, raw) in enumerate(found):
-                line = f"    {addr}  raw16={raw}"
-                if i + 1 < len(found) and found[i + 1][0] == addr + 1:
-                    nxt = found[i + 1][1]
-                    u32 = (raw << 16) | nxt
-                    f32 = struct.unpack(">f", struct.pack(">HH", raw, nxt))[0]
-                    line += f"   with next: uint32={u32}  float32={f32:.3f}"
-                print(line)
+            if binary_table:
+                # A binary point is only meaningful as on/off; ON ones are called out because a
+                # closed breaker or a standing trip is what an engineer is looking for here.
+                for addr, bit in found:
+                    print(f"    {addr}  = {bit}{'   <-- ON' if bit else ''}")
+            else:
+                # Adjacent pairs are worth showing as one 32-bit value too: measurements are
+                # commonly published across two registers, which is why the point map has UINT32
+                # entries.
+                for i, (addr, raw) in enumerate(found):
+                    line = f"    {addr}  raw16={raw}"
+                    if i + 1 < len(found) and found[i + 1][0] == addr + 1:
+                        nxt = found[i + 1][1]
+                        u32 = (raw << 16) | nxt
+                        f32 = struct.unpack(">f", struct.pack(">HH", raw, nxt))[0]
+                        line += f"   with next: uint32={u32}  float32={f32:.3f}"
+                    print(line)
         else:
             note = f" (last error: {err})" if err else ""
             print(f"  nothing answered in this range{note}")
@@ -242,15 +264,20 @@ def scan_registers(host: str, port: int, unit: int, span: int) -> int:
 
     print("================ VERDICT ================")
     if total_found:
-        print(f"{total_found} register address(es) answered.")
-        print("Match these against the readings on the relay's own display to identify which is")
-        print("current, voltage and frequency, then put those addresses into a point-map profile.")
-        print("Do not trust a guess: an address that returns a plausible number is not proof of")
-        print("its meaning, and a wrong mapping invents measurements that were never measured.")
+        print(f"{total_found} address(es) answered: {binary_found} binary, {register_found} register.")
+        if binary_found:
+            print("\nBinary points are breaker position, trips and pickups. Toggle one on the relay")
+            print("(open/close the breaker, or trigger the test trip) and re-run: the address whose")
+            print("value follows what you did is the one to map.")
+        if register_found:
+            print("\nRegisters are measurements. Compare the values against the relay's own display")
+            print("to tell current from voltage from frequency, and note the scaling as you go.")
+        print("\nAn address that returns a plausible number is not proof of its meaning. A guessed")
+        print("mapping invents measurements that were never measured, which is worse than no data.")
     else:
         print("No address in the scanned range answered.")
-        print("Either the map starts outside this range (raise --span), the unit id is wrong")
-        print("(try --unit-scan), or no Modbus map is configured on the relay at all.")
+        print("Either the map sits outside this range (raise --span, or move --start up), the unit")
+        print("id is wrong (try --unit-scan), or no Modbus map is configured on the relay at all.")
     return 0 if total_found else 1
 
 
@@ -283,10 +310,16 @@ def main() -> int:
         help="Sweep the register tables to find which addresses the relay actually serves",
     )
     parser.add_argument("--span", type=int, default=200, help="Addresses per table for --scan (default 200)")
+    parser.add_argument(
+        "--start",
+        type=int,
+        default=0,
+        help="Wire offset to start --scan from; a map can sit well above address 1 (default 0)",
+    )
     args = parser.parse_args()
 
     if args.scan:
-        return scan_registers(args.host, args.port, args.unit, args.span)
+        return scan_registers(args.host, args.port, args.unit, args.span, args.start)
 
     units = [0, 1, 2, 3, 4, 255] if args.unit_scan else [args.unit]
     print(f"Modbus TCP probe -> {args.host}:{args.port}")
