@@ -28,7 +28,7 @@ export interface EventPublisher {
   close(): Promise<void>;
 }
 
-const GATEWAY_ID = process.env.GATEWAY_ID ?? 'gateway-local';
+export const GATEWAY_ID = process.env.GATEWAY_ID ?? 'gateway-local';
 const MAX_QUEUE = Number(process.env.PUBLISH_QUEUE_MAX ?? 10000);
 
 function envelope(event: UnifiedEvent, sequence: number): EventEnvelope<UnifiedEvent> {

@@ -75,6 +75,91 @@ ingestRouter.post('/events', async (req, res) => {
   res.status(result.rejected.length && !result.accepted ? 422 : 202).json(result);
 });
 
+/**
+ * Relay/comm-path configuration for a gateway to load at startup (and to refresh periodically),
+ * replacing any hardcoded local profile list. Shaped as the edge gateway's RelayCommProfile[]
+ * driver contract (packages/shared/src/relay-driver-v2.ts) expects, so the response can be used
+ * directly in place of the gateway's demoProfiles().
+ *
+ * point_map_profile_id is stored per comm path in the schema, but RelayCommProfile carries one per
+ * relay; a relay takes the first non-null profile id among its enabled paths.
+ */
+ingestRouter.get('/config', async (req, res) => {
+  const gatewayId = req.header('X-Gateway-Id') ?? undefined;
+  const auth = (req.header('Authorization') ?? '').replace(/^Bearer\s+/i, '') || undefined;
+  const gateway = await authenticateGateway(gatewayId, auth);
+  if (!gateway) return res.status(401).json({ error: 'Gateway authentication failed' });
+  if (!gateway.enabled) {
+    return res.status(403).json({
+      error: gateway.pending
+        ? 'This gateway is registered but not yet enabled. An administrator must enable it before it can load relay configuration.'
+        : 'This gateway is disabled.',
+    });
+  }
+
+  const { rows } = await pool.query(
+    `SELECT r.id AS relay_id, r.relay_code, r.manufacturer, r.model,
+            cp.path_id, cp.protocol, cp.role, cp.host, cp.port,
+            cp.serial_device, cp.serial_baud_rate, cp.serial_link_address,
+            cp.credentials_ref, cp.addressing, cp.poll_interval_ms,
+            cp.supervision_timeout_s, cp.point_map_profile_id
+     FROM relay_comm_paths cp
+     JOIN relays r ON r.id = cp.relay_id
+     WHERE cp.enabled = TRUE
+     ORDER BY r.relay_code, CASE cp.role WHEN 'PRIMARY' THEN 0 WHEN 'BACKUP' THEN 1 ELSE 2 END, cp.path_id`
+  );
+
+  interface ConfigProfile {
+    relayId: string;
+    relayCode: string;
+    manufacturer: string;
+    model: string;
+    pointMapProfileId?: string;
+    paths: unknown[];
+  }
+  const byRelay = new Map<string, ConfigProfile>();
+  for (const r of rows) {
+    let profile = byRelay.get(r.relay_id);
+    if (!profile) {
+      profile = {
+        relayId: r.relay_id,
+        relayCode: r.relay_code,
+        manufacturer: r.manufacturer,
+        model: r.model,
+        paths: [],
+      };
+      byRelay.set(r.relay_id, profile);
+    }
+    if (!profile.pointMapProfileId && r.point_map_profile_id) profile.pointMapProfileId = r.point_map_profile_id;
+    profile.paths.push({
+      pathId: r.path_id,
+      protocol: r.protocol,
+      role: r.role,
+      host: r.host ?? undefined,
+      port: r.port ?? undefined,
+      // dataBits/parity/stopBits aren't columns on relay_comm_paths yet; only devicePath, baudRate
+      // and linkAddress are captured today, so serial protocols get reasonable defaults for the rest.
+      serial: r.serial_device
+        ? {
+            devicePath: r.serial_device,
+            baudRate: r.serial_baud_rate ?? 9600,
+            dataBits: 8,
+            parity: 'none',
+            stopBits: 1,
+            linkAddress: r.serial_link_address ?? undefined,
+          }
+        : undefined,
+      credentialsRef: r.credentials_ref ?? undefined,
+      addressing: r.addressing ?? {},
+      pollIntervalMs: r.poll_interval_ms ?? undefined,
+      supervisionTimeoutSec: r.supervision_timeout_s,
+      enabled: true,
+    });
+  }
+
+  res.json({ relays: Array.from(byRelay.values()) });
+});
+
 /** Gateway heartbeat — lets the fleet view show a gateway as alive even during quiet periods. */
 ingestRouter.post('/heartbeat', async (req, res) => {
   const gatewayId = req.header('X-Gateway-Id') ?? undefined;

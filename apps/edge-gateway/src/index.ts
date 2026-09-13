@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { RelayCommProfile, PROTOCOL_CATALOGUE, SourceProtocolV2 } from '@simorgh/shared';
 import { DriverRegistry } from './protocols/registry';
 import { ConnectionSupervisor } from './supervisor';
-import { createEventPublisher } from './publisher';
+import { createEventPublisher, GATEWAY_ID } from './publisher';
 
 /**
  * Simorgh Edge Gateway.
@@ -154,6 +154,60 @@ function demoProfiles(): RelayCommProfile[] {
   ];
 }
 
+/**
+ * Field mode: load the real relay/comm-path configuration from the backend instead of the
+ * hardcoded demo profiles. This is the same INGEST_URL/INGEST_TOKEN/GATEWAY_ID the event
+ * publisher already uses (see publisher.ts) — the config endpoint lives one path segment over,
+ * at .../api/ingest/config rather than .../api/ingest/events.
+ */
+async function loadFieldProfiles(): Promise<RelayCommProfile[]> {
+  const ingestUrl = process.env.INGEST_URL;
+  if (!ingestUrl) {
+    console.error('[edge-gateway] INGEST_URL is not set; cannot load relay configuration in field mode');
+    return [];
+  }
+  const configUrl = new URL('config', ingestUrl);
+  try {
+    const response = await fetch(configUrl, {
+      headers: {
+        'X-Gateway-Id': GATEWAY_ID,
+        ...(process.env.INGEST_TOKEN ? { Authorization: `Bearer ${process.env.INGEST_TOKEN}` } : {}),
+      },
+    });
+    if (!response.ok) {
+      console.error(`[edge-gateway] failed to load relay configuration: HTTP ${response.status} from ${configUrl}`);
+      return [];
+    }
+    const body = (await response.json()) as { relays: RelayCommProfile[] };
+    console.log(`[edge-gateway] loaded ${body.relays.length} relay(s) from ${configUrl}`);
+    return body.relays;
+  } catch (err) {
+    console.error(`[edge-gateway] failed to load relay configuration: ${(err as Error).message}`);
+    return [];
+  }
+}
+
+/** Reports path diagnostics back so the platform's "Relay comms health" view reflects reality. */
+async function reportHeartbeat(ingestUrl: string, diagnostics: ReturnType<ConnectionSupervisor['allDiagnostics']>) {
+  const heartbeatUrl = new URL('heartbeat', ingestUrl);
+  try {
+    const response = await fetch(heartbeatUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Gateway-Id': GATEWAY_ID,
+        ...(process.env.INGEST_TOKEN ? { Authorization: `Bearer ${process.env.INGEST_TOKEN}` } : {}),
+      },
+      body: JSON.stringify({ diagnostics }),
+    });
+    if (!response.ok) {
+      console.warn(`[edge-gateway] heartbeat rejected: HTTP ${response.status}`);
+    }
+  } catch (err) {
+    console.warn(`[edge-gateway] heartbeat failed: ${(err as Error).message}`);
+  }
+}
+
 async function main() {
   const simulate = process.env.SIMULATE !== 'false';
   const registry = new DriverRegistry({ simulate });
@@ -179,17 +233,24 @@ async function main() {
     );
   });
 
-  for (const profile of demoProfiles()) {
+  const profiles = simulate ? demoProfiles() : await loadFieldProfiles();
+  for (const profile of profiles) {
     const problems = await supervisor.addRelay(profile);
     for (const p of problems) console.warn(`[edge-gateway] config check (${profile.relayCode}): ${p}`);
   }
 
   supervisor.start();
 
+  const ingestUrl = process.env.INGEST_URL;
+  const heartbeatTimer = ingestUrl
+    ? setInterval(() => void reportHeartbeat(ingestUrl, supervisor.allDiagnostics()), 15000)
+    : undefined;
+
   const shutdown = async () => {
     console.log('[edge-gateway] shutting down...');
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
     supervisor.stop();
-    for (const profile of demoProfiles()) await supervisor.removeRelay(profile.relayId);
+    for (const profile of profiles) await supervisor.removeRelay(profile.relayId);
     await publisher.close();
     process.exit(0);
   };
