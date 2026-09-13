@@ -1,5 +1,6 @@
 import 'dotenv/config';
-import { RelayCommProfile, PROTOCOL_CATALOGUE, SourceProtocolV2 } from '@simorgh/shared';
+import { randomUUID } from 'crypto';
+import { RelayCommProfile, PROTOCOL_CATALOGUE, SourceProtocolV2, UnifiedEvent } from '@simorgh/shared';
 import { DriverRegistry } from './protocols/registry';
 import { ConnectionSupervisor } from './supervisor';
 import { createEventPublisher, GATEWAY_ID } from './publisher';
@@ -187,6 +188,58 @@ async function loadFieldProfiles(): Promise<RelayCommProfile[]> {
   }
 }
 
+/**
+ * Publishes the measurements a polling driver has read.
+ *
+ * A measurement is not an event, so nothing in the driver contract ever emitted one: the poll
+ * loop read current/voltage/frequency off the relay into the driver's own memory, where they
+ * stayed. Events were raised only for transitions (a trip, a breaker moving), so a healthy relay
+ * sitting in service produced a connected path, a rising frame count, and no readings anywhere in
+ * the platform.
+ *
+ * The UnifiedEvent model already has a MEASUREMENT type and a measurements payload for exactly
+ * this, so publish a periodic snapshot through the normal path. Severity is INFO because a reading
+ * is not an incident, and timeSyncQuality is carried from the path so a Modbus-derived value is
+ * still marked gateway-stamped rather than implying precision it does not have.
+ */
+async function publishMeasurements(
+  supervisor: ConnectionSupervisor,
+  publisher: { publish: (e: UnifiedEvent) => Promise<void> },
+  profiles: RelayCommProfile[]
+) {
+  for (const profile of profiles) {
+    try {
+      const snapshot = await supervisor.readStatus(profile.relayId);
+      if (!snapshot) continue;
+
+      const measurements = snapshot.measurements ?? {};
+      if (Object.keys(measurements).length === 0) continue;
+
+      const via = profile.paths.find((p) => p.pathId === snapshot.viaPathId);
+      await publisher.publish({
+        eventId: randomUUID(),
+        timestamp: snapshot.lastUpdated ?? new Date().toISOString(),
+        // The backend resolves project/province/city from the relay id, as it does for the
+        // supervisor's own events; the gateway is not told its site's identifiers.
+        projectId: '',
+        provinceId: '',
+        cityId: '',
+        relayId: profile.relayId,
+        eventType: 'MEASUREMENT',
+        severity: 'INFO',
+        sourceProtocol: via?.protocol ?? 'MODBUS_TCP',
+        message: `Measurements from ${profile.relayCode}`,
+        measurements,
+        synthetic: false,
+        timeSyncQuality: snapshot.timeSyncQuality,
+        sourcePathId: snapshot.viaPathId,
+      });
+    } catch (err) {
+      console.warn(`[edge-gateway] measurement publish failed for ${profile.relayCode}: ${(err as Error).message}`);
+    }
+  }
+}
+
 /** Reports path diagnostics back so the platform's "Relay comms health" view reflects reality. */
 async function reportHeartbeat(ingestUrl: string, diagnostics: ReturnType<ConnectionSupervisor['allDiagnostics']>) {
   const heartbeatUrl = new URL('heartbeat', ingestUrl);
@@ -246,9 +299,18 @@ async function main() {
     ? setInterval(() => void reportHeartbeat(ingestUrl, supervisor.allDiagnostics()), 15000)
     : undefined;
 
+  // Slower than the poll interval on purpose: readings are for trend and display, and one event
+  // per register per poll would bury genuine protection events in the timeline.
+  const measurementIntervalMs = Number(process.env.MEASUREMENT_PUBLISH_MS ?? 15000);
+  const measurementTimer =
+    measurementIntervalMs > 0
+      ? setInterval(() => void publishMeasurements(supervisor, publisher, profiles), measurementIntervalMs)
+      : undefined;
+
   const shutdown = async () => {
     console.log('[edge-gateway] shutting down...');
     if (heartbeatTimer) clearInterval(heartbeatTimer);
+    if (measurementTimer) clearInterval(measurementTimer);
     supervisor.stop();
     for (const profile of profiles) await supervisor.removeRelay(profile.relayId);
     await publisher.close();
