@@ -51,6 +51,11 @@ interface ModbusState {
   breakerStatus: string;
   lastBool: Map<number, boolean>;
   pollTimer?: NodeJS.Timeout;
+  reconnectTimer?: NodeJS.Timeout;
+  // False only after disconnect() is called deliberately (path removed, gateway shutting down).
+  // Distinguishes "the peer closed this on us, try again" from "we closed it, leave it be" in the
+  // socket's 'close' handler, which fires in both cases.
+  wantConnected: boolean;
 }
 
 export class ModbusDriver extends BaseRelayDriver {
@@ -80,6 +85,7 @@ export class ModbusDriver extends BaseRelayDriver {
         measurements: {},
         breakerStatus: 'UNKNOWN',
         lastBool: new Map(),
+        wantConnected: false,
       };
       this.states.set(pathId, s);
     }
@@ -112,8 +118,22 @@ export class ModbusDriver extends BaseRelayDriver {
     }
 
     const s = this.state(path.pathId);
+    s.wantConnected = true;
+    await this.attemptConnect(path, profile);
+  }
+
+  /**
+   * One connection attempt. Resolves once it settles (CONNECTED or FAILED) so the first call from
+   * connect() can be awaited by the supervisor; a later reconnect calls this again without anyone
+   * awaiting it. If the peer or the network drops an established connection, 'close' fires with no
+   * preceding 'error' (that is the "0 failures, no error message" symptom this exists to fix) and,
+   * as long as the path still wants to be connected, a reconnect is scheduled rather than leaving
+   * the path dead until the whole gateway process is restarted.
+   */
+  private attemptConnect(path: CommPath, profile: RelayCommProfile): Promise<void> {
+    const s = this.state(path.pathId);
     this.setState(path, 'CONNECTING');
-    await new Promise<void>((resolve) => {
+    return new Promise<void>((resolve) => {
       const socket = net.createConnection({ host: path.host!, port: path.port ?? 502 }, () => {
         s.socket = socket;
         this.setState(path, 'CONNECTED');
@@ -128,12 +148,22 @@ export class ModbusDriver extends BaseRelayDriver {
       socket.on('close', () => {
         this.setState(path, 'DISCONNECTED');
         if (s.pollTimer) clearInterval(s.pollTimer);
+        if (s.socket === socket) s.socket = undefined;
+        if (s.wantConnected) {
+          if (s.reconnectTimer) clearTimeout(s.reconnectTimer);
+          s.reconnectTimer = setTimeout(() => {
+            if (s.wantConnected) void this.attemptConnect(path, profile);
+          }, 5000);
+        }
+        resolve(); // never leave the initial connect() await hanging on a same-tick close
       });
     });
   }
 
   async disconnect(path: CommPath): Promise<void> {
     const s = this.state(path.pathId);
+    s.wantConnected = false;
+    if (s.reconnectTimer) clearTimeout(s.reconnectTimer);
     if (s.pollTimer) clearInterval(s.pollTimer);
     s.pending.forEach((p) => {
       clearTimeout(p.timer);
