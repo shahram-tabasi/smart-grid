@@ -169,6 +169,91 @@ def probe(host: str, port: int, unit: int, address: int, count: int, hold: float
     return answered
 
 
+def scan_registers(host: str, port: int, unit: int, span: int) -> int:
+    """
+    Find which register addresses the relay actually serves.
+
+    On a relay where the Modbus map is built by the commissioning engineer rather than fixed by the
+    vendor -- SIPROTEC 5 being the case in point, where the mapping is authored in DIGSI 5 -- the
+    addresses cannot be guessed from the model name, and a generic profile will be refused on every
+    read. Sweeping the tables finds the real ones without waiting on documentation.
+
+    The whole sweep reuses ONE connection: relays commonly allow only a couple of concurrent Modbus
+    sessions, so opening a socket per address would exhaust them.
+    """
+    tables = [
+        ("Input registers (3xxxx)", 4, 30001),
+        ("Holding registers (4xxxx)", 3, 40001),
+    ]
+
+    print(f"Scanning {host}:{port} unit id {unit}, {span} addresses per table")
+    print("(one register at a time, reusing a single connection)\n")
+
+    total_found = 0
+    for label, function, doc_base in tables:
+        print(f"--- {label} ---")
+        sock, err = None, None
+        found = []
+        for offset in range(span):
+            if sock is None:
+                try:
+                    sock = socket.create_connection((host, port), timeout=5)
+                    sock.settimeout(5)
+                except OSError as e:
+                    print(f"  cannot connect: {e}")
+                    break
+            try:
+                response = read_once(sock, unit, function, offset, 1, tid=(offset % 65535) + 1)
+            except (Dropped, ConnectionResetError, socket.timeout, OSError) as e:
+                err = e
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+                sock = None
+                continue
+
+            if response[0] & 0x80:
+                continue  # exception: this address is not served, which is the expected common case
+            payload = response[2:]
+            if len(payload) >= 2:
+                found.append((doc_base + offset, struct.unpack(">H", payload[0:2])[0]))
+
+        if sock:
+            sock.close()
+
+        if found:
+            total_found += len(found)
+            print(f"  {len(found)} address(es) answered:")
+            # Adjacent pairs are worth showing as one 32-bit value too: measurements are commonly
+            # published across two registers, which is why the point map has UINT32 entries.
+            for i, (addr, raw) in enumerate(found):
+                line = f"    {addr}  raw16={raw}"
+                if i + 1 < len(found) and found[i + 1][0] == addr + 1:
+                    nxt = found[i + 1][1]
+                    u32 = (raw << 16) | nxt
+                    f32 = struct.unpack(">f", struct.pack(">HH", raw, nxt))[0]
+                    line += f"   with next: uint32={u32}  float32={f32:.3f}"
+                print(line)
+        else:
+            note = f" (last error: {err})" if err else ""
+            print(f"  nothing answered in this range{note}")
+        print()
+
+    print("================ VERDICT ================")
+    if total_found:
+        print(f"{total_found} register address(es) answered.")
+        print("Match these against the readings on the relay's own display to identify which is")
+        print("current, voltage and frequency, then put those addresses into a point-map profile.")
+        print("Do not trust a guess: an address that returns a plausible number is not proof of")
+        print("its meaning, and a wrong mapping invents measurements that were never measured.")
+    else:
+        print("No address in the scanned range answered.")
+        print("Either the map starts outside this range (raise --span), the unit id is wrong")
+        print("(try --unit-scan), or no Modbus map is configured on the relay at all.")
+    return 0 if total_found else 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Probe a relay's Modbus TCP server.")
     parser.add_argument("host")
@@ -192,7 +277,16 @@ def main() -> int:
         default=15.0,
         help="Seconds to hold the socket idle afterwards, to detect an idle cutoff (0 disables)",
     )
+    parser.add_argument(
+        "--scan",
+        action="store_true",
+        help="Sweep the register tables to find which addresses the relay actually serves",
+    )
+    parser.add_argument("--span", type=int, default=200, help="Addresses per table for --scan (default 200)")
     args = parser.parse_args()
+
+    if args.scan:
+        return scan_registers(args.host, args.port, args.unit, args.span)
 
     units = [0, 1, 2, 3, 4, 255] if args.unit_scan else [args.unit]
     print(f"Modbus TCP probe -> {args.host}:{args.port}")
