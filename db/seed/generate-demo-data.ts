@@ -6,6 +6,8 @@
 // Idempotent: truncates prior demo data (cascading from the reference tables) before regenerating, so
 // `npm run db:seed` is safe to re-run during development.
 import 'dotenv/config';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Pool, PoolClient } from 'pg';
 import { v4 as uuid } from 'uuid';
 import bcrypt from 'bcryptjs';
@@ -104,6 +106,15 @@ async function main() {
     console.log('[seed] truncating prior demo data...');
     await client.query(
       'TRUNCATE TABLE provinces, customers, users, company RESTART IDENTITY CASCADE'
+    );
+
+    // point_map_profiles has a FK to users (created_by), so the CASCADE above wipes it too, even
+    // though the built-in rows it seeds have created_by = NULL. Re-apply that migration's (already
+    // idempotent, ON CONFLICT DO NOTHING) INSERT so a reseed never leaves relay provisioning without
+    // any point-map profile to assign.
+    console.log('[seed] restoring built-in point-map profiles...');
+    await client.query(
+      readFileSync(join(__dirname, '../migrations/018_seed_builtin_point_map_profiles.sql'), 'utf-8')
     );
 
     console.log('[seed] reference geography...');
