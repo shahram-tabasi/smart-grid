@@ -1,0 +1,15 @@
+{
+  "name": "@simorgh/shared",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "// prepare": "Builds dist/ automatically after `npm install`, because this package's entry point is dist/index.js and the seed script, gateway and API all import it. It is guarded on the sources being present: Docker's dependency layer copies package.json files only, and an unguarded build there fails with TS5058 and breaks the image build.",
+    "prepare": "node -e \"const fs=require('fs');if(fs.existsSync('tsconfig.json')&&fs.existsSync('src')){require('child_process').execSync('npm run build',{stdio:'inherit'})}else{console.log('[shared] prepare: no sources here (dependency-only install) - skipping build')}\""
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5"
+  }
+}

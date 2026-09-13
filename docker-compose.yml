@@ -1,0 +1,190 @@
+# Simorgh Grid — Phase 1 local stack.
+# Bring up everything:              docker compose up -d --build
+# Apply migrations + seed demo data (first run, or after schema changes):
+#                                    docker compose run --rm migrate
+# Web:      http://localhost:3000
+# API:      http://localhost:4000/health
+# Adminer:  http://localhost:8081  (optional DB browser)
+# MinIO:    http://localhost:9001  (S3-compatible object storage console, user/pass in .env)
+#
+# Phase 2 adds Redpanda (Kafka-API compatible, no ZooKeeper) behind the `kafka` profile, plus the
+# Edge Gateway behind the `gateway` profile. Neither starts by default, so plain `docker compose up`
+# stays a small stack suitable for evaluation:
+#   docker compose up -d                            -> EVENT_BUS=direct, no broker needed
+#   docker compose --profile kafka up -d            -> adds Redpanda; set EVENT_BUS=kafka in .env
+#   docker compose --profile gateway up -d          -> adds the Edge Gateway in simulator mode
+
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-simorgh}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-simorgh_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-simorgh_grid}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - simorgh_pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-simorgh}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-simorgh_minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-simorgh_minio_password}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - simorgh_minio_data:/data
+
+  # Kafka-compatible event bus. Only started with: docker compose --profile kafka up -d
+  # Redpanda rather than Kafka+ZooKeeper: same API, far smaller footprint, which matters for an
+  # on-premise deployment inside a utility.
+  redpanda:
+    image: redpandadata/redpanda:latest
+    profiles: ["kafka"]
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=1G
+      - --overprovisioned
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+      - "${REDPANDA_ADMIN_PORT:-9644}:9644"
+    volumes:
+      - simorgh_redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Edge Gateway in simulator mode, so the full ingest path can be exercised end to end without
+  # any field hardware. Only started with: docker compose --profile gateway up -d
+  # In a real deployment this runs AT THE SITE, not in the datacentre, and connects outbound only.
+  edge-gateway:
+    image: node:20-alpine
+    profiles: ["gateway"]
+    working_dir: /workspace
+    restart: unless-stopped
+    volumes:
+      - ./:/workspace
+    environment:
+      SIMULATE: ${GATEWAY_SIMULATE:-true}
+      GATEWAY_ID: ${GATEWAY_ID:-gateway-docker-demo}
+      EVENT_BUS: ${EVENT_BUS:-direct}
+      INGEST_URL: ${INGEST_URL:-http://api:4000/api/ingest/events}
+      INGEST_TOKEN: ${INGEST_TOKEN:-dev-only-ingest-token-change-me}
+      KAFKA_BROKERS: redpanda:29092
+    depends_on:
+      - api
+    # Same reason as the migrate service: the gateway imports @simorgh/shared at runtime under tsx.
+    command: sh -c "npm install --workspaces --include-workspace-root --no-audit --no-fund && npm run build --workspace=@simorgh/shared && npm run dev --workspace=@simorgh/edge-gateway"
+
+  # One-off: applies db/migrations/*.sql then generates demo data. Re-run any time; the seed script is
+  # idempotent (see db/seed/generate-demo-data.ts header). Not started by `up` — run it explicitly.
+  migrate:
+    image: node:20-alpine
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-simorgh}:${POSTGRES_PASSWORD:-simorgh_dev_password}@postgres:5432/${POSTGRES_DB:-simorgh_grid}
+      SKIP_SEED: ${SKIP_SEED:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # @simorgh/shared must be BUILT before the seed runs: its entry point is dist/index.js, and the
+    # seed script imports it. (Migrations don't — which is why a missing build shows up only at the
+    # seed step.) `npm install` normally builds it via the package's prepare script; the explicit
+    # build here is deliberate belt-and-braces so this still works with --ignore-scripts.
+    # SKIP_SEED=1 applies migrations only. A real deployment wants the schema without demo data;
+    # an evaluation wants both. Migrations always run — a database without them is unusable.
+    command: >
+      sh -c "npm install --workspaces --include-workspace-root --no-audit --no-fund &&
+             npm run build --workspace=@simorgh/shared &&
+             npm run db:migrate &&
+             if [ \"$$SKIP_SEED\" = \"1\" ]; then
+               echo '[migrate] SKIP_SEED=1 — demo data not created';
+             else
+               npm run db:seed;
+             fi"
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: 4000
+      DATABASE_URL: postgres://${POSTGRES_USER:-simorgh}:${POSTGRES_PASSWORD:-simorgh_dev_password}@postgres:5432/${POSTGRES_DB:-simorgh_grid}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-secret-change-me}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      REQUIRE_AUTH_FOR_READS: ${REQUIRE_AUTH_FOR_READS:-false}
+      SIMULATE_LIVE_FEED: ${SIMULATE_LIVE_FEED:-true}
+      EVENT_BUS: ${EVENT_BUS:-direct}
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-redpanda:29092}
+      INGEST_TOKEN: ${INGEST_TOKEN:-dev-only-ingest-token-change-me}
+      INGEST_RATE_LIMIT_PER_MINUTE: ${INGEST_RATE_LIMIT_PER_MINUTE:-6000}
+      # AI: unset by default, so the deterministic engine runs and no data leaves the deployment.
+      AI_LLM_BASE_URL: ${AI_LLM_BASE_URL:-}
+      AI_LLM_MODEL: ${AI_LLM_MODEL:-}
+      AI_LLM_API_KEY: ${AI_LLM_API_KEY:-}
+      AI_EMBEDDING_BASE_URL: ${AI_EMBEDDING_BASE_URL:-}
+      AI_EMBEDDING_MODEL: ${AI_EMBEDDING_MODEL:-}
+      AI_EMBEDDING_API_KEY: ${AI_EMBEDDING_API_KEY:-}
+    ports:
+      - "${API_PORT:-4000}:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:4000/ws}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:4000/ws}
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      - api
+
+  adminer:
+    image: adminer:latest
+    restart: unless-stopped
+    ports:
+      - "${ADMINER_PORT:-8081}:8080"
+    depends_on:
+      - postgres
+
+volumes:
+  simorgh_pg_data:
+  simorgh_minio_data:
+  simorgh_redpanda_data:

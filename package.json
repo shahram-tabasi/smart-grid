@@ -1,0 +1,30 @@
+{
+  "name": "simorgh-grid",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Simorgh Grid \u2014 National Electrical Project & Protection Operations Center",
+  "workspaces": [
+    "packages/*",
+    "apps/api",
+    "apps/edge-gateway",
+    "apps/web",
+    "db"
+  ],
+  "scripts": {
+    "db:migrate": "npm run migrate --workspace=db",
+    "db:seed": "npm run seed --workspace=db",
+    "dev:api": "npm run dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "dev:gateway": "npm run dev --workspace=@simorgh/edge-gateway",
+    "protocols": "tsx apps/edge-gateway/src/index.ts --catalogue",
+    "test:guardrails": "tsx tests/ai-guardrails.test.ts",
+    "typecheck": "tsc --noEmit -p packages/shared/tsconfig.json && tsc --noEmit -p apps/api/tsconfig.json && tsc --noEmit -p apps/edge-gateway/tsconfig.json && tsc --noEmit -p db/tsconfig.json",
+    "build": "npm run build --workspace=packages/shared && npm run build --workspace=apps/api && npm run build --workspace=@simorgh/edge-gateway && npm run build --workspace=apps/web",
+    "simulator": "npm run simulator --workspace=@simorgh/edge-gateway",
+    "test:protocol": "tsx tests/iec104-loopback.test.ts",
+    "test": "npm run test:guardrails && npm run test:protocol"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

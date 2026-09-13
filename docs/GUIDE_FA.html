@@ -1,0 +1,768 @@
+<title>راهنمای سیمرغ گرید</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;900&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground:      #eaeef2;
+    --surface:     #ffffff;
+    --surface-2:   #f2f5f8;
+    --line:        #cfd8e1;
+    --line-soft:   #e1e8ee;
+    --ink:         #0f1620;
+    --ink-2:       #3d4a58;
+    --muted:       #66727f;
+    --gold:        #8a6a12;
+    --gold-fill:   #f5e7bd;
+    --healthy:     #1c6b45;
+    --warning:     #96620f;
+    --critical:    #a32e28;
+    --info:        #1f5590;
+    --info-fill:   #dce8f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:    #080d14;
+      --surface:   #111a25;
+      --surface-2: #16212e;
+      --line:      #2a3949;
+      --line-soft: #1e2b39;
+      --ink:       #e7edf4;
+      --ink-2:     #b3c0cf;
+      --muted:     #7e8d9d;
+      --gold:      #e3bb54;
+      --gold-fill: #372d10;
+      --healthy:   #4dbf8b;
+      --warning:   #e0a942;
+      --critical:  #e8776f;
+      --info:      #6aa8e8;
+      --info-fill: #142737;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:    #080d14;
+    --surface:   #111a25;
+    --surface-2: #16212e;
+    --line:      #2a3949;
+    --line-soft: #1e2b39;
+    --ink:       #e7edf4;
+    --ink-2:     #b3c0cf;
+    --muted:     #7e8d9d;
+    --gold:      #e3bb54;
+    --gold-fill: #372d10;
+    --healthy:   #4dbf8b;
+    --warning:   #e0a942;
+    --critical:  #e8776f;
+    --info:      #6aa8e8;
+    --info-fill: #142737;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: Vazirmatn, "Segoe UI", Tahoma, sans-serif;
+    font-size: 16px;
+    line-height: 1.95;
+    direction: rtl;
+    text-align: right;
+  }
+
+  .mono {
+    font-family: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+    direction: ltr;
+    unicode-bidi: embed;
+    font-size: .88em;
+  }
+
+  .wrap { max-width: 940px; margin: 0 auto; padding: 0 24px 96px; }
+
+  /* ---------- masthead ---------- */
+  header.top {
+    border-bottom: 2px solid var(--gold);
+    padding: 56px 0 26px;
+    margin-bottom: 8px;
+  }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    direction: ltr;
+    text-align: right;
+    font-size: 11px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-size: clamp(30px, 5vw, 46px);
+    font-weight: 900;
+    line-height: 1.35;
+    margin: 0 0 12px;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: 17px;
+    color: var(--ink-2);
+    max-width: 62ch;
+    margin: 0;
+  }
+
+  /* ---------- counters ---------- */
+  .counts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+    gap: 1px;
+    background: var(--line-soft);
+    border: 1px solid var(--line-soft);
+    margin: 34px 0 12px;
+  }
+  .counts div { background: var(--surface); padding: 14px 12px; }
+  .counts b {
+    display: block;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 22px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--gold);
+    line-height: 1.3;
+  }
+  .counts span { font-size: 12px; color: var(--muted); }
+  .caption { font-size: 12.5px; color: var(--muted); margin: 0 0 44px; }
+
+  /* ---------- sections ---------- */
+  section { margin: 0 0 60px; scroll-margin-top: 20px; }
+  h2 {
+    font-size: 24px;
+    font-weight: 700;
+    margin: 0 0 6px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+    text-wrap: balance;
+  }
+  h2 .num {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px;
+    color: var(--gold);
+    margin-left: 10px;
+    font-weight: 500;
+  }
+  .lede { color: var(--ink-2); margin: 16px 0 0; max-width: 68ch; }
+  p { max-width: 68ch; }
+  h3 { font-size: 17px; font-weight: 700; margin: 30px 0 6px; }
+
+  /* ---------- answer block (the ANSI question) ---------- */
+  .answer {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-right: 4px solid var(--gold);
+    padding: 26px 26px 22px;
+    margin: 26px 0;
+  }
+  .answer .q {
+    font-size: 15px;
+    color: var(--muted);
+    margin: 0 0 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px dashed var(--line);
+  }
+  .answer .a { font-size: 17px; font-weight: 700; margin: 0 0 4px; }
+
+  /* ---------- tables ---------- */
+  .scroll { overflow-x: auto; margin: 20px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14.5px; background: var(--surface); }
+  th, td { padding: 11px 14px; text-align: right; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+  thead th {
+    font-size: 11.5px;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.mono, th.mono { text-align: right; }
+
+  /* ---------- screen list ---------- */
+  .screens { display: grid; gap: 1px; background: var(--line-soft); border: 1px solid var(--line-soft); }
+  .screen {
+    background: var(--surface);
+    display: grid;
+    grid-template-columns: 172px 1fr;
+    gap: 20px;
+    padding: 16px 18px;
+  }
+  .screen h4 { margin: 0; font-size: 15px; font-weight: 700; }
+  .screen .en {
+    font-family: "IBM Plex Mono", monospace;
+    direction: ltr;
+    text-align: right;
+    font-size: 11px;
+    color: var(--muted);
+    display: block;
+    margin-top: 2px;
+  }
+  .screen p { margin: 0; font-size: 14.5px; color: var(--ink-2); }
+  .screen .who {
+    display: inline-block;
+    margin-top: 7px;
+    font-size: 11.5px;
+    color: var(--gold);
+    background: var(--gold-fill);
+    padding: 1px 8px;
+    border-radius: 2px;
+  }
+  @media (max-width: 620px) {
+    .screen { grid-template-columns: 1fr; gap: 8px; }
+  }
+
+  /* ---------- flow diagram ---------- */
+  figure { margin: 26px 0; }
+  figure svg { width: 100%; height: auto; display: block; }
+  figcaption { font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+
+  /* ---------- callouts ---------- */
+  .note {
+    border: 1px solid var(--line);
+    background: var(--surface);
+    padding: 16px 18px;
+    margin: 20px 0;
+    font-size: 14.5px;
+  }
+  .note.limit { border-right: 3px solid var(--warning); }
+  .note.rule  { border-right: 3px solid var(--critical); }
+  .note.ok    { border-right: 3px solid var(--healthy); }
+  .note b { display: block; margin-bottom: 4px; }
+  .note p { margin: 0; max-width: none; }
+
+  ul, ol { max-width: 68ch; padding-right: 20px; }
+  li { margin-bottom: 7px; }
+
+  .steps { counter-reset: s; list-style: none; padding: 0; margin: 20px 0; }
+  .steps li {
+    counter-increment: s;
+    position: relative;
+    padding: 0 44px 16px 0;
+    margin: 0;
+  }
+  .steps li::before {
+    content: counter(s);
+    position: absolute;
+    right: 0;
+    top: 4px;
+    width: 28px; height: 28px;
+    display: grid; place-items: center;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px;
+    color: var(--gold);
+    border: 1px solid var(--gold);
+    border-radius: 50%;
+  }
+  .steps li b { display: block; }
+
+  code {
+    font-family: "IBM Plex Mono", monospace;
+    direction: ltr;
+    unicode-bidi: embed;
+    background: var(--surface-2);
+    border: 1px solid var(--line-soft);
+    padding: 1px 5px;
+    font-size: .85em;
+    border-radius: 2px;
+  }
+
+  footer {
+    border-top: 1px solid var(--line);
+    padding-top: 20px;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <p class="eyebrow">Simorgh Grid — Operations Guide</p>
+  <h1>سیمرغ گرید چه کاری انجام می‌دهد؟</h1>
+  <p class="standfirst">
+    راهنمای فارسی مرکز فرماندهی پروژه‌های برقی و حفاظت الکترو کویر — اینکه هر صفحه چه چیزی نشان
+    می‌دهد، چه سؤالی را جواب می‌دهد، و مرزهای ایمنی آن کجاست.
+  </p>
+</header>
+
+<div class="counts">
+  <div><b>۵۶</b><span>پروژه</span></div>
+  <div><b>۴۳۴</b><span>رله حفاظتی</span></div>
+  <div><b>۱۰۳۱</b><span>تابع حفاظتی</span></div>
+  <div><b>۱۲۳۵</b><span>رویداد ثبت‌شده</span></div>
+  <div><b>۳۰</b><span>پروتکل ارتباطی</span></div>
+  <div><b>۴۳۳</b><span>شهرستان</span></div>
+</div>
+<p class="caption">
+  اعداد بالا از پایگاه دادهٔ همین نسخه خوانده شده‌اند. داده‌های پروژه و رله در حال حاضر
+  <strong>دادهٔ نمایشی (Demo)</strong> هستند و در پایگاه داده با پرچم <code>is_demo_data</code>
+  علامت خورده‌اند تا هرگز با دادهٔ واقعی میدان اشتباه گرفته نشوند.
+</p>
+
+<!-- ============================================================ -->
+<section id="what">
+  <h2><span class="num">۰۱</span>این نرم‌افزار چه نیازی را برطرف می‌کند</h2>
+
+  <p class="lede">
+    الکترو کویر تابلو می‌سازد و تابلوها در جاهای مختلف نصب می‌شوند. بعد از تحویل، سه سؤال همیشه
+    باقی می‌ماند و جواب هرکدام امروز در جای دیگری است — در تلفن، در تلگرام، در ذهن یک نفر:
+  </p>
+
+  <ul>
+    <li><strong>الان وضعیت کدام تابلو خراب است؟</strong> بدون اینکه کسی زنگ بزند و بگوید.</li>
+    <li><strong>چرا بریکر افتاد؟</strong> کدام تابع حفاظتی عمل کرد، در چه لحظه‌ای، با چه جریانی.</li>
+    <li><strong>پروژه‌ها کجای کار هستند؟</strong> از مهندسی تا ساخت تا FAT تا راه‌اندازی.</li>
+  </ul>
+
+  <p>
+    سیمرغ گرید این سه را در یک جا جمع می‌کند: از رله‌ها داده می‌خواند، رویدادها را با زمان دقیق
+    نگه می‌دارد، و آن را هم برای مهندس حفاظت (با جزئیات کامل) و هم برای مدیریت (بدون نیاز به دانستن
+    پروتکل) نمایش می‌دهد.
+  </p>
+
+  <figure>
+    <svg viewBox="0 0 900 172" role="img" aria-label="مسیر داده از رله تا صفحه نمایش">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+          <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+        </marker>
+      </defs>
+      <g style="color: var(--muted)">
+        <line x1="700" y1="60" x2="640" y2="60" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)"/>
+        <line x1="490" y1="60" x2="430" y2="60" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)"/>
+        <line x1="280" y1="60" x2="220" y2="60" stroke="currentColor" stroke-width="1.5" marker-end="url(#ar)"/>
+      </g>
+
+      <g>
+        <rect x="700" y="24" width="190" height="72" fill="var(--surface)" stroke="var(--gold)" stroke-width="1.5"/>
+        <text x="795" y="52" text-anchor="middle" fill="var(--ink)" font-family="Vazirmatn" font-size="15" font-weight="700">رلهٔ حفاظتی</text>
+        <text x="795" y="76" text-anchor="middle" fill="var(--muted)" font-family="IBM Plex Mono" font-size="11">IEC 104 / DNP3 / Modbus</text>
+
+        <rect x="490" y="24" width="190" height="72" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="585" y="52" text-anchor="middle" fill="var(--ink)" font-family="Vazirmatn" font-size="15" font-weight="700">Edge Gateway</text>
+        <text x="585" y="76" text-anchor="middle" fill="var(--muted)" font-family="Vazirmatn" font-size="11.5">داخل شبکهٔ صنعتی</text>
+
+        <rect x="280" y="24" width="190" height="72" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="375" y="52" text-anchor="middle" fill="var(--ink)" font-family="Vazirmatn" font-size="15" font-weight="700">سرور سیمرغ</text>
+        <text x="375" y="76" text-anchor="middle" fill="var(--muted)" font-family="Vazirmatn" font-size="11.5">پایگاه داده + API</text>
+
+        <rect x="30" y="24" width="190" height="72" fill="var(--surface)" stroke="var(--line)" stroke-width="1.5"/>
+        <text x="125" y="52" text-anchor="middle" fill="var(--ink)" font-family="Vazirmatn" font-size="15" font-weight="700">صفحهٔ مرورگر</text>
+        <text x="125" y="76" text-anchor="middle" fill="var(--muted)" font-family="Vazirmatn" font-size="11.5">مدیر و مهندس</text>
+      </g>
+
+      <g>
+        <line x1="30" y1="130" x2="890" y2="130" stroke="var(--critical)" stroke-width="1" stroke-dasharray="5 4"/>
+        <text x="890" y="152" text-anchor="end" fill="var(--critical)" font-family="Vazirmatn" font-size="12.5">
+          جریان داده فقط در یک جهت است — هیچ فرمانی از این صفحات به سمت رله برنمی‌گردد
+        </text>
+      </g>
+    </svg>
+    <figcaption>
+      رله هرگز مستقیم به اینترنت وصل نمی‌شود. گیت‌وی داخل شبکهٔ صنعتی می‌ماند و فقط داده را
+      به بیرون می‌فرستد.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ============================================================ -->
+<section id="ansi">
+  <h2><span class="num">۰۲</span>سؤال شما دربارهٔ کدهای ANSI</h2>
+
+  <div class="answer">
+    <p class="q">
+      «این‌همه کد ANSI دارد — آیا در صفحهٔ وضعیت همه را نمایش می‌دهد یا فقط کلیات فالت و آلارم را؟»
+    </p>
+    <p class="a">هر دو، اما در دو صفحهٔ متفاوت — و این عمدی است.</p>
+    <p style="margin:8px 0 0; color:var(--ink-2)">
+      صفحهٔ <strong>هر رله</strong> تمام توابع حفاظتی همان رله را کامل نشان می‌دهد.
+      صفحه‌های <strong>کلی</strong> (نمای کلی، نقشه، آلارم‌ها) عمداً فقط خلاصه می‌دهند، چون یک مدیر
+      نباید برای فهمیدن «کدام تابلو مشکل دارد» ۱۰۳۱ ردیف تابع حفاظتی را رد کند.
+    </p>
+  </div>
+
+  <h3>در صفحهٔ یک رله چه می‌بینید</h3>
+  <p>برای هر تابع حفاظتی، پنج ستون — دقیقاً همان چیزی که مهندس حفاظت اول نگاه می‌کند:</p>
+
+  <div class="scroll">
+    <table>
+      <thead>
+        <tr>
+          <th class="mono">ANSI</th>
+          <th>تابع</th>
+          <th>Pickup</th>
+          <th>تأخیر زمانی</th>
+          <th>وضعیت</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td class="mono">50/51</td><td>اضافه‌جریان فاز</td><td class="mono">1200 A</td><td class="mono">300 ms</td><td style="color:var(--healthy)">فعال</td></tr>
+        <tr><td class="mono">50N/51N</td><td>اتصال زمین</td><td class="mono">120 A</td><td class="mono">200 ms</td><td style="color:var(--healthy)">فعال</td></tr>
+        <tr><td class="mono">50BF</td><td>نقص بریکر</td><td class="mono">—</td><td class="mono">150 ms</td><td style="color:var(--healthy)">فعال</td></tr>
+        <tr><td class="mono">87T</td><td>دیفرانسیل ترانسفورماتور</td><td class="mono">0.3 pu</td><td class="mono">—</td><td style="color:var(--healthy)">فعال</td></tr>
+        <tr><td class="mono">27</td><td>کاهش ولتاژ</td><td class="mono">0.8 pu</td><td class="mono">2000 ms</td><td style="color:var(--warning);font-weight:600">غیرفعال</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note ok">
+    <b>یک نکته که تازه اضافه شد</b>
+    <p>
+      ستون‌های «تأخیر زمانی» و «وضعیت فعال/غیرفعال» در پایگاه داده وجود داشتند اما در صفحه نمایش
+      داده نمی‌شدند. یک استیج حفاظتی که <strong>غیرفعال</strong> است و کسی متوجهش نشده، یک حفرهٔ
+      حفاظتی است — حالا صریحاً و با رنگ هشدار مشخص می‌شود.
+    </p>
+  </div>
+
+  <h3>کدهای ANSI موجود در دادهٔ فعلی</h3>
+  <p class="mono" style="color:var(--gold); font-size:15px; letter-spacing:.03em">
+    27 · 27/LOV · 46 · 49 · 49M/50M · 50/51 · 50BF · 50N/51N · 59 · 67 · 87B · 87T
+  </p>
+  <p>
+    ۱۲ کد در دادهٔ نمایشی، روی ۴۳۲ رله و مجموعاً ۱۰۳۱ ردیف. ساختار پایگاه داده ۱۸ نوع تابع
+    استاندارد را می‌شناسد (شامل حفاظت دیستانس، فرکانس، نقص مدار تریپ) و افزودن کد جدید محدودیتی
+    ندارد — کد ANSI یک فیلد متنی آزاد است.
+  </p>
+
+  <h3>در رویدادها (SOE) هم کد حفظ می‌شود</h3>
+  <p>
+    این مهم‌ترین بخش است: وقتی بریکر می‌افتد، سیستم فقط نمی‌گوید «فالت». می‌گوید
+    <strong>کدام تابع عمل کرد</strong>، در چه ساعت و ثانیه‌ای، و با چه اندازه‌گیری‌ای.
+    از ۱۲۳۵ رویداد فعلی، ۲۸۷ رویداد نام تابع حفاظتی را حمل می‌کنند — بقیه رویدادهای اندازه‌گیری،
+    قطع و وصل ارتباط، و تغییر وضعیت بریکر هستند که ذاتاً تابع حفاظتی ندارند.
+  </p>
+
+  <div class="note limit">
+    <b>محدودیت صادقانه</b>
+    <p>
+      تنظیمات حفاظتی در این نسخه <strong>ثبت‌شده</strong> هستند: یا در زمان راه‌اندازی وارد شده‌اند
+      یا از رله خوانده شده‌اند. سیستم آن‌ها را <strong>نمی‌نویسد</strong> و هرگز تنظیم رله را تغییر
+      نمی‌دهد. برای رلهٔ واقعی، نگاشت نقاط (Point Map) تعیین می‌کند کدام آدرس در رله به کدام تابع
+      نگاشت می‌شود.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="screens">
+  <h2><span class="num">۰۳</span>هر صفحه چه سؤالی را جواب می‌دهد</h2>
+  <p class="lede">
+    سیزده صفحه، و هرکدام برای یک سؤال مشخص ساخته شده. اگر صفحه‌ای به سؤال شما جواب نمی‌دهد،
+    احتمالاً سؤال شما مال صفحهٔ دیگری است.
+  </p>
+
+  <div class="screens">
+    <div class="screen">
+      <div><h4>نمای کلی</h4><span class="en">Overview</span></div>
+      <div><p>الان کل ناوگان در چه حالی است؟ شاخص‌های کلیدی، رله‌های بحرانی، آخرین رویدادها.</p>
+      <span class="who">مدیریت</span></div>
+    </div>
+
+    <div class="screen">
+      <div><h4>نقشهٔ جهانی</h4><span class="en">Global Map</span></div>
+      <div><p>تابلوهای ما کجا هستند و کدام نقطه مشکل دارد؟ با دو کلیک از نقطهٔ روی نقشه تا وضعیت
+      یک رله پایین می‌آیید: شهر ← پروژه ← رله.</p>
+      <span class="who">مدیریت و مهندسی</span></div>
+    </div>
+
+    <div class="screen">
+      <div><h4>پروژه‌ها</h4><span class="en">Projects</span></div>
+      <div><p>هر پروژه کجای کار است؟ پیشرفت به تفکیک مرحله: مهندسی، ساخت، FAT، نصب، راه‌اندازی،
+      یکپارچه‌سازی SCADA و رله.</p>
+      <span class="who">مدیر پروژه</span></div>
+    </div>
+
+    <div class="screen">
+      <div><h4>رله‌ها</h4><span class="en">Relays</span></div>
+      <div><p>فهرست تمام رله‌ها، مستقل از سازنده، مرتب‌شده بر اساس امتیاز سلامت. با فیلتر سازنده و
+      وضعیت سلامت.</p>
+      <span class="who">مهندس حفاظت</span></div>
+    </div>
+
+    <div class="screen">
+      <div><h4>عملیات زنده</h4><span class="en">Live Operations</span></div>
+      <div><p>همین الان چه اتفاقی می‌افتد؟ جریان رویدادها به‌صورت زنده از طریق WebSocket.</p>
+      <span class="who">اتاق کنترل</span></div>
+    </div>
+
+    <div class="screen">
+      <div><h4>فالت‌ها</h4><span class="en">Faults</span></div>
+      <div><p>چه چیزی عمل کرد و چرا؟ هر فالت با نوع، شدت، وضعیت تریپ، خط زمانی و تحلیل.</p>
+      <span class="who">مهندس حفاظت</span></div>
+    </div>
+
+    <div class="screen">
+      <div><h4>آلارم‌ها</h4><span class="en">Alarms</span></div>
+      <div><p>به چه چیزی باید رسیدگی شود؟ آلارم‌ها همبسته‌سازی شده‌اند تا یک اتفاق، ۴۰ آلارم
+      جداگانه تولید نکند.</p>
+      <span class="who">اتاق کنترل</span></div>
+    </div>
+
+    <div class="screen">
+      <div><h4>ارتباطات</h4><span class="en">Communications</span></div>
+      <div><p>کدام رله قطع است و از چه راهی وصل می‌شود؟ سلامت ارتباط، گیت‌وی‌ها، و کاتالوگ
+      ۳۰ پروتکل.</p>
+      <span class="who">مهندس مخابرات</span></div>
+    </div>
+
+    <div class="screen">
+      <div><h4>افزودن پروژه / رله</h4><span class="en">Provisioning</span></div>
+      <div><p>ثبت یک پروژهٔ واقعی و یک رلهٔ واقعی، مرحله‌به‌مرحله. بخش ۰۴ همین راهنما.</p>
+      <span class="who">مدیر فنی</span></div>
+    </div>
+
+    <div class="screen">
+      <div><h4>دستور کارها</h4><span class="en">Work Orders</span></div>
+      <div><p>چه کسی باید چه کاری بکند؟ گردش کار از فالت تا تأیید نهایی:
+      <span class="mono">FAULT → ANALYSIS → ASSIGNED → REPAIR → TEST → VERIFIED</span></p>
+      <span class="who">سرویس میدانی</span></div>
+    </div>
+
+    <div class="screen">
+      <div><h4>هوش مصنوعی</h4><span class="en">AI Intelligence</span></div>
+      <div><p>تحلیل ریشه‌ای و پاسخ به سؤال، اما همیشه با نمایش دادهٔ پشتوانه. مشورتی است، نه
+      تصمیم‌گیر.</p>
+      <span class="who">همه</span></div>
+    </div>
+
+    <div class="screen">
+      <div><h4>مدیریتی</h4><span class="en">Executive</span></div>
+      <div><p>نمای مدیریت ارشد بدون هیچ جزئیات پروتکلی: روند فالت‌ها، پروژه‌های در ریسک، سلامت
+      ناوگان.</p>
+      <span class="who">هیئت مدیره</span></div>
+    </div>
+
+    <div class="screen">
+      <div><h4>مدیریت سیستم</h4><span class="en">Administration</span></div>
+      <div><p>چه کسی چه کاری کرد؟ دفتر ثبت ممیزی (Audit Log) برای هر تغییر.</p>
+      <span class="who">مدیر سیستم</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="location">
+  <h2><span class="num">۰۴</span>تعریف مکان: ایران و خارج از ایران</h2>
+
+  <p class="lede">
+    قبلاً فقط ۱۳ استان و ۲۴ شهر در سیستم بود، بنابراین بیشتر سایت‌های واقعی جایی برای ثبت نداشتند.
+    حالا دو راه وجود دارد و هر دو کار می‌کنند.
+  </p>
+
+  <h3>راه اول — انتخاب از فهرست</h3>
+  <p>
+    در صفحهٔ «افزودن پروژه / رله»، سه انتخاب پشت سر هم: <strong>کشور ← استان ← شهرستان</strong>.
+    برای ایران هر ۳۱ استان و ۴۳۳ شهرستان از قبل موجود است.
+  </p>
+  <p class="mono" style="color:var(--gold)">Iran → Yazd → Mehriz</p>
+
+  <h3>راه دوم — افزودن در همان لحظه</h3>
+  <p>
+    برای خارج از ایران، کشور را انتخاب کنید و کنار هر فیلد روی <strong>«+ افزودن»</strong> بزنید.
+    نام را تایپ می‌کنید و همان‌جا ساخته می‌شود — بدون نیاز به دخالت برنامه‌نویس.
+  </p>
+  <p class="mono" style="color:var(--gold)">Germany → + Berlin → + Berlin</p>
+  <p>
+    اگر اسمی که تایپ می‌کنید از قبل وجود داشته باشد، همان رکورد موجود انتخاب می‌شود و رکورد تکراری
+    ساخته نمی‌شود. دو نفر که در یک روز «Berlin» را اضافه کنند، باز هم یک برلین خواهند داشت.
+  </p>
+
+  <h3>راه سوم — پین روی نقشه (ساده‌ترین راه)</h3>
+  <p>
+    در صفحهٔ نقشه دکمهٔ <strong>«Set location»</strong> را بزنید و <strong>مستقیم روی نقطهٔ دلخواه
+    کلیک کنید</strong>. لازم نیست مختصات را تایپ کنید و لازم نیست از قبل پروژه را انتخاب کنید —
+    اول پین می‌افتد، بعد سیستم می‌پرسد این محل مربوط به کدام پروژه است.
+  </p>
+  <p>
+    قبلاً باید اول پروژه را از فهرست انتخاب می‌کردید وگرنه کلیک روی نقشه هیچ کاری نمی‌کرد. این
+    برعکس بود: چیزی که کاربر جلوی چشمش دارد «محل» است، نه شمارهٔ پروژه.
+  </p>
+
+  <h3>نقشه حالا اسم‌ها را نشان می‌دهد</h3>
+  <p>
+    مثل گوگل ارث، نقشه بسته به میزان زوم اسم‌ها را عوض می‌کند:
+  </p>
+  <ul>
+    <li><strong>نمای جهانی:</strong> نام کشورها. کشوری که پروژه دارد پررنگ‌تر است.</li>
+    <li><strong>نمای یک کشور:</strong> مرزهای استانی پررنگ می‌شوند و نام استان‌ها ظاهر می‌شود.</li>
+    <li><strong>زوم بیشتر:</strong> نام شهرها.</li>
+  </ul>
+  <p>
+    وقتی چند برچسب روی هم می‌افتند، سیستم آن‌هایی را که جا ندارند کنار می‌گذارد و با زوم‌کردن دوباره
+    برمی‌گردند — به‌جای اینکه اسم‌ها روی هم چاپ شوند و هیچ‌کدام خوانده نشود. کشوری که پروژه دارد در
+    این رقابت اولویت دارد.
+  </p>
+
+  <div class="note rule">
+    <b>قانون حریم مکانی — تغییر نکرده است</b>
+    <p>
+      برای پست‌های برق شبکهٔ سراسری، سیستم <strong>هرگز</strong> آدرس دقیق یا مختصات GPS را نمایش
+      نمی‌دهد. فقط استان و شهرستان. این محدودیت در سطح نقش پایگاه داده اعمال شده، نه فقط با انتخاب
+      برنامه: نقش <code>simorgh_api</code> اصلاً به جدول مکان دقیق دسترسی ندارد.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="trial">
+  <h2><span class="num">۰۵</span>راه‌اندازی یک تابلوی تست</h2>
+  <p class="lede">
+    برای اتصال یک رلهٔ واقعی در کارگاه، ترتیب کار این است. هر مرحله شناسهٔ مرحلهٔ قبل را لازم دارد،
+    برای همین به‌صورت ویزارد ساخته شده تا ترتیب را نشود اشتباه زد.
+  </p>
+
+  <ol class="steps">
+    <li><b>پروژه را بسازید</b>کد، نام، کشور، استان، شهرستان و سطح ولتاژ. مثلاً <code>TEST-001</code>.</li>
+    <li><b>زنجیرهٔ تجهیزات را بسازید</b>پست ← تابلو ← پنل. برای یک تابلوی تست، اسم‌های ساده کافی است.</li>
+    <li><b>رله را ثبت کنید</b>سازنده، مدل، شمارهٔ سریال. سیستم به هیچ سازنده‌ای وابسته نیست.</li>
+    <li><b>مسیر ارتباطی را تعریف کنید</b>پروتکل، IP و پورت رله. برای شروع
+      <span class="mono">IEC 60870-5-104</span> یا <span class="mono">Modbus TCP</span> پیشنهاد می‌شود —
+      از ۳۰ پروتکل موجود، ۵ تا به‌عنوان «پیشنهادی» علامت خورده‌اند تا انتخاب اول ساده بماند.</li>
+    <li><b>ارتباط را تست کنید</b>دکمهٔ تست فقط بررسی می‌کند که آن آدرس و پورت در دسترس هست یا نه.</li>
+    <li><b>گیت‌وی را وصل کنید</b>Edge Gateway را داخل شبکهٔ کارگاه اجرا کنید و در صفحهٔ ارتباطات
+      تأییدش کنید. از این لحظه رویدادهای واقعی وارد می‌شوند.</li>
+  </ol>
+
+  <div class="note limit">
+    <b>دربارهٔ شبکه</b>
+    <p>
+      رله را به شبکهٔ عمومی وصل نکنید. رله در شبکهٔ صنعتی می‌ماند، گیت‌وی در همان شبکه اجرا می‌شود،
+      و فقط گیت‌وی است که به سرور سیمرغ داده می‌فرستد. اگر شبکهٔ اداری و صنعتی یکی است، حداقل
+      رله را در یک VLAN جدا بگذارید.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="limits">
+  <h2><span class="num">۰۶</span>مرزهایی که این سیستم عبور نمی‌کند</h2>
+  <p class="lede">
+    این‌ها محدودیت فنی نیستند؛ تصمیم طراحی هستند و عمداً در کد و در پایگاه داده قفل شده‌اند.
+  </p>
+
+  <div class="scroll">
+    <table>
+      <thead><tr><th>مرز</th><th>یعنی چه</th><th>کجا اعمال شده</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>فقط خواندنی</strong></td>
+          <td>هیچ مسیری در کل API وجود ندارد که به رله یا بریکر فرمان بدهد.</td>
+          <td>هیچ endpoint فرمان نوشته نشده است</td>
+        </tr>
+        <tr>
+          <td><strong>هوش مصنوعی مشورتی است</strong></td>
+          <td>AI هرگز تنظیم رله را عوض نمی‌کند و فرمان صادر نمی‌کند. فقط پیشنهاد می‌دهد، آن هم با
+          نمایش دادهٔ پشتوانه.</td>
+          <td>جدول تأیید انسانی + ۹ تست خودکار</td>
+        </tr>
+        <tr>
+          <td><strong>مکان دقیق پنهان است</strong></td>
+          <td>برای پست‌های شبکه فقط استان و شهرستان. بدون آدرس، بدون GPS.</td>
+          <td>سطح نقش پایگاه داده</td>
+        </tr>
+        <tr>
+          <td><strong>بدون وابستگی به سازنده</strong></td>
+          <td>زیمنس، ABB، اشنایدر، SEL و بقیه با یک ساختار واحد. نگاشت نقاط، داده است نه کد.</td>
+          <td>پروفایل‌های Point Map</td>
+        </tr>
+        <tr>
+          <td><strong>دادهٔ دمو مشخص است</strong></td>
+          <td>هر ردیف نمایشی پرچم دارد تا با دادهٔ واقعی میدان قاطی نشود.</td>
+          <td><code>is_demo_data</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note rule">
+    <b>چرا این‌قدر روی «فقط خواندنی» تأکید می‌شود</b>
+    <p>
+      یک اشتباه در سیستم مانیتورینگ یعنی یک عدد اشتباه روی صفحه. همان اشتباه در سیستمی که فرمان
+      می‌دهد، یعنی یک بریکر که در لحظهٔ اشتباه باز می‌شود. نسخهٔ اول عمداً هیچ‌وقت در موقعیت دوم
+      قرار نمی‌گیرد.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="next">
+  <h2><span class="num">۰۷</span>چه چیزی هنوز نیست</h2>
+  <p class="lede">تا اینجا آنچه هست را گفتیم. این‌ها هنوز نیستند و بهتر است قبل از دمو بدانید:</p>
+
+  <ul>
+    <li>
+      <strong>ورود اجباری شد.</strong> این مورد در نسخهٔ قبلی راهنما به‌عنوان کار باقی‌مانده نوشته
+      شده بود و حالا انجام شده — بخش ۰۸ را ببینید.
+    </li>
+    <li>
+      <strong>داده‌ها نمایشی هستند.</strong> ۵۶ پروژه و ۴۳۴ رله ساختگی‌اند تا صفحات خالی نباشند.
+      رلهٔ واقعی از مسیر بخش ۰۵ اضافه می‌شود.
+    </li>
+    <li>
+      <strong>تنظیمات حفاظتی خوانده می‌شوند، نوشته نمی‌شوند.</strong> تغییر تنظیم رله از این نرم‌افزار
+      انجام نمی‌شود و در نسخهٔ اول هم قرار نیست انجام شود.
+    </li>
+    <li>
+      <strong>IEC 61850 هنوز شبیه‌سازی‌شده است.</strong> ساختار آماده است اما به کتابخانهٔ واقعی
+      (libiec61850) وصل نشده. IEC 104، DNP3 و Modbus با یک همتای پروتکل واقعی تست شده‌اند.
+    </li>
+  </ul>
+</section>
+
+
+<!-- ============================================================ -->
+<section id="auth">
+  <h2><span class="num">۰۸</span>ورود اجباری شد</h2>
+
+  <div class="note rule">
+    <b>ایرادی که شما گزارش کردید</b>
+    <p>
+      «قبل از لاگین، نفر به همه اطلاعات دسترسی دارد.» درست بود. هشت مسیر API بدون هیچ احراز هویتی
+      دادهٔ واقعی برمی‌گرداندند: نمای کلی، نقشه، پروژه‌ها، رله‌ها، فالت‌ها، آلارم‌ها، دستور کارها و
+      خلاصهٔ مدیریتی. یک مسیر دیگر هم <strong>ایمیل، نام کامل و نقش تمام کاربران</strong> را به هرکسی
+      که می‌پرسید تحویل می‌داد.
+    </p>
+  </div>
+
+  <h3>چه چیزی عوض شد</h3>
+  <ul>
+    <li>
+      <strong>پیش‌فرض برعکس شد.</strong> قبلاً سیستم باز بود مگر اینکه یادتان می‌ماند آن را ببندید.
+      پیش‌فرضی که برای امن‌بودن باید به‌خاطر سپرده شود، پیش‌فرض امنی نیست. حالا سیستم بسته است و
+      بازکردنش کار عمدی است.
+    </li>
+    <li>
+      <strong>مسیر فهرست کاربران کاملاً حذف شد.</strong> دفترچهٔ تلفن کارکنان چیزی نیست که دم در
+      پخش شود. حساب‌ها در <code>docs/OPERATIONS_MANUAL.md</code> مستند هستند.
+    </li>
+    <li>
+      <strong>هوش مصنوعی، گزارش‌ها و مدیریت سیستم هرگز عمومی نمی‌شوند</strong> — حتی اگر حالت دمو
+      روشن باشد.
+    </li>
+    <li>
+      <strong>در مرورگر هم بازدیدکنندهٔ بدون نشست به صفحهٔ ورود هدایت می‌شود</strong> و آدرس صفحهٔ
+      مقصد حفظ می‌شود تا بعد از ورود همان‌جا برگردد.
+    </li>
+  </ul>
+
+  <div class="note limit">
+    <b>اگر برای دمو لازم شد باز باشد</b>
+    <p>
+      فقط روی یک لپ‌تاپ ایزوله: در <code>.env</code> مقدار <code>SIMORGH_PUBLIC_READS=true</code> را
+      بگذارید. سرور در هر بار اجرا یک هشدار در لاگ می‌نویسد، تا ماه‌ها بعد کسی به‌طور اتفاقی متوجه
+      نشود که سروری باز مانده است. برای هر نصب شبکه‌ای این مقدار را نگذارید.
+    </p>
+  </div>
+</section>
+
+<footer>
+  سیمرغ گرید — نسخهٔ ۰.۲ (فاز ۲) · مرکز فرماندهی پروژه‌های برقی و حفاظت الکترو کویر ·
+  اعداد این راهنما از پایگاه دادهٔ همین نسخه خوانده شده‌اند.
+</footer>
+
+</div>

@@ -1,0 +1,24 @@
+{
+  "name": "@simorgh/db",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "migrate": "tsx migrate.ts",
+    "seed": "tsx seed/generate-demo-data.ts"
+  },
+  "dependencies": {
+    "@simorgh/shared": "*",
+    "pg": "^8.11.5",
+    "uuid": "^9.0.1",
+    "dotenv": "^16.4.5",
+    "bcryptjs": "^2.4.3"
+  },
+  "devDependencies": {
+    "tsx": "^4.7.2",
+    "typescript": "^5.4.5",
+    "@types/pg": "^8.11.6",
+    "@types/uuid": "^9.0.8",
+    "@types/node": "^20.12.7",
+    "@types/bcryptjs": "^2.4.6"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "@simorgh/edge-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Simorgh Edge Gateway \u2014 protocol drivers + normalizer. Phase 1 ships the driver interface and a MockRelayDriver so the whole platform is demonstrable before any real site is connected (spec \u00a722/\u00a733).",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "simulator": "tsx src/simulator/index.ts"
+  },
+  "dependencies": {
+    "@simorgh/shared": "*",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.5",
+    "tsx": "^4.7.2",
+    "@types/node": "^20.12.7"
+  }
+}
