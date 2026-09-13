@@ -75,6 +75,10 @@ export default function CommsPage() {
   const [onlyProblems, setOnlyProblems] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Which gateway has an enable request in flight, and any error from the last attempt (e.g. a
+  // non-admin trying it, which the API correctly rejects with 403).
+  const [enabling, setEnabling] = useState<Record<string, boolean>>({});
+  const [enableError, setEnableError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,6 +120,21 @@ export default function CommsPage() {
       cancelled = true;
     };
   }, [tab, onlyProblems]);
+
+  async function enableGateway(gatewayId: string) {
+    if (enabling[gatewayId]) return;
+    setEnabling((m) => ({ ...m, [gatewayId]: true }));
+    setEnableError(null);
+    try {
+      await apiFetch(`/api/comms/gateways/${gatewayId}/enable`, { method: 'POST' });
+      const d = await apiFetch<{ gateways: any[] }>('/api/comms/gateways');
+      setGateways(d.gateways ?? []);
+    } catch (e: any) {
+      setEnableError(e?.message ?? 'Failed to enable gateway');
+    } finally {
+      setEnabling((m) => ({ ...m, [gatewayId]: false }));
+    }
+  }
 
   const usageByProtocol = new Map(usage.map((u) => [u.protocol, u]));
 
@@ -378,6 +397,11 @@ export default function CommsPage() {
       {/* ---- Gateways ---- */}
       {tab === 'gateways' && !loading && (
         <div className="overflow-x-auto rounded-lg border border-graphite-700">
+          {enableError && (
+            <div className="border-b border-status-critical/40 bg-status-critical/10 px-4 py-2 text-sm text-status-critical">
+              {enableError}
+            </div>
+          )}
           {gateways.length === 0 ? (
             <div className="px-4 py-8 text-center text-sm text-graphite-400">
               No edge gateways registered. A gateway registers itself on first contact and must then be enabled by an
@@ -392,6 +416,7 @@ export default function CommsPage() {
                   <th className="px-3 py-2">Version</th>
                   <th className="px-3 py-2">Last seen</th>
                   <th className="px-3 py-2">State</th>
+                  <th className="px-3 py-2"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-graphite-800">
@@ -415,6 +440,17 @@ export default function CommsPage() {
                         <span className="rounded bg-status-critical/20 px-1.5 py-0.5 text-[10px] text-status-critical">stale</span>
                       ) : (
                         <span className="rounded bg-status-healthy/20 px-1.5 py-0.5 text-[10px] text-status-healthy">online</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {!g.enabled && (
+                        <button
+                          onClick={() => enableGateway(g.gateway_id)}
+                          disabled={enabling[g.gateway_id]}
+                          className="rounded border border-accent px-2 py-1 text-xs text-accent hover:bg-accent/10 disabled:opacity-50"
+                        >
+                          {enabling[g.gateway_id] ? 'Enabling…' : 'Enable'}
+                        </button>
                       )}
                     </td>
                   </tr>
