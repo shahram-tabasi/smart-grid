@@ -102,9 +102,14 @@ services:
     command: sh -c "npm install --workspaces --include-workspace-root --no-audit --no-fund && npm run build --workspace=@simorgh/shared && npm run dev --workspace=@simorgh/edge-gateway"
 
   # One-off: applies db/migrations/*.sql then generates demo data. Re-run any time; the seed script is
-  # idempotent (see db/seed/generate-demo-data.ts header). Not started by `up` — run it explicitly.
+  # idempotent (see db/seed/generate-demo-data.ts header). `profiles` keeps it out of a plain
+  # `docker compose up` (which starts every service without a profile) — without this, `up` silently
+  # re-ran the seed step on every invocation, and that step TRUNCATEs provinces/cities CASCADE,
+  # which wipes ANY project (real ones included, via their province_id/city_id foreign key) along
+  # with the demo data it means to regenerate. Run it explicitly: docker compose run --rm migrate.
   migrate:
     image: node:20-alpine
+    profiles: ["tools"]
     working_dir: /workspace
     volumes:
       - ./:/workspace
